@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:signature/signature.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:csv/csv.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -18,7 +21,72 @@ class AttendanceApp extends StatelessWidget {
     return MaterialApp(
       title: 'Student Attendance',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: AttendanceListPage(),
+      home: const LoginPage(),
+    );
+  }
+}
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  void login() async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+    if (username.isEmpty || password.isEmpty) return;
+
+    final response = await http.post(
+      Uri.parse('http://192.168.100.10:8003/api/method/login'),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: {'usr': username, 'pwd': password},
+    );
+
+    final res = jsonDecode(response.body);
+    if (response.statusCode == 200 && res['message'] == 'Logged In') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => AttendanceListPage()),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Login failed: Invalid credentials")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Login')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextField(
+              controller: _usernameController,
+              decoration: const InputDecoration(labelText: 'Username'),
+            ),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: true,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: login,
+              child: const Text('Login'),
+            )
+          ],
+        ),
+      ),
     );
   }
 }
@@ -33,7 +101,9 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
   late Database db;
   bool isOnline = false;
   String selectedGroup = 'All';
+  String selectedStatus = 'All';
   List<String> groups = ['All'];
+  List<String> statuses = ['All', 'Present', 'Absent'];
 
   @override
   void initState() {
@@ -42,18 +112,11 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
   }
 
   Future<void> initApp() async {
-    await clearDB();
     await initDB();
     await checkConnectivity();
     await fetchFromFrappe();
     await loadLocal();
     await syncToServer();
-  }
-
-  Future<void> clearDB() async {
-    final dbPath = await getDatabasesPath();
-    final path = p.join(dbPath, 'attendance.db');
-    await deleteDatabase(path);
   }
 
   Future<void> initDB() async {
@@ -62,7 +125,7 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
       p.join(dbPath, 'attendance.db'),
       onCreate: (db, version) async {
         await db.execute('''
-          CREATE TABLE attendance(
+          CREATE TABLE IF NOT EXISTS attendance(
             name TEXT PRIMARY KEY,
             student TEXT,
             student_name TEXT,
@@ -88,52 +151,33 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
   }
 
   Future<void> fetchFromFrappe() async {
-    if (!isOnline) {
-      print("Device offline, skipping fetch.");
-      return;
-    }
-
+    if (!isOnline) return;
     final url = Uri.parse(
-        'http://192.168.100.10:8003/api/resource/Student Attendance'
-            '?fields=["name","student","student_name","course_schedule","student_group","date","status","customer_name"]'
-            '&limit_page_length=1000'
-    );
-
+        'http://192.168.100.10:8003/api/resource/Student Attendance?fields=["name","student","student_name","course_schedule","student_group","date","status","customer_name"]&limit_page_length=1000');
     try {
       final response = await http.get(url, headers: {
         'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
       });
-
-      print("API Status Code: ${response.statusCode}");
-      print("API Response: ${response.body}");
-
-      if (response.statusCode != 200) {
-        print("Fetch failed!");
-        return;
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List items = data['data'];
+        for (var record in items) {
+          await db.insert('attendance', {
+            'name': record['name'],
+            'student': record['student'],
+            'student_name': record['student_name'],
+            'course_schedule': record['course_schedule'],
+            'student_group': record['student_group'],
+            'date': record['date'],
+            'status': record['status'],
+            'customer_name': record['customer_name'],
+            'signature': '',
+            'synced': 0,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
       }
-
-      final data = json.decode(response.body);
-      final List items = data['data'];
-      print("Received ${items.length} records");
-
-      for (var record in items) {
-        await db.insert('attendance', {
-          'name': record['name'] ?? '',
-          'student': record['student'] ?? '',
-          'student_name': record['student_name'] ?? '',
-          'course_schedule': record['course_schedule'] ?? '',
-          'student_group': record['student_group'] ?? '',
-          'date': record['date'] ?? '',
-          'status': record['status'] ?? '',
-          'customer_name': record['customer_name'] ?? '',
-          'signature': '',
-          'synced': 0,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-
-      print("Inserted records into SQLite.");
     } catch (e) {
-      print("ERROR during fetch: $e");
+      print("Fetch error: $e");
     }
   }
 
@@ -149,48 +193,39 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
   Future<void> syncToServer() async {
     if (!isOnline) return;
     final unsynced = await db.query('attendance', where: 'synced = 0 AND signature != ""');
-
     for (var record in unsynced) {
       try {
         final uploadResponse = await http.post(
-          // Uri.parse('http://192.168.100.10:8003/api/method/upload_file'),
-          Uri.parse('http://192.168.100.10:8003/api/method/frappe.client.attach_file'),
-          headers: {
-            'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
-            'Content-Type': 'application/json'
-          },
-          body: jsonEncode({
-            // "file_name": "${record['name']}.png",
-            // "is_private": 0,
-            // "attached_to_doctype": "Student Attendance",
-            // "attached_to_name": record['name'],
-            // "attached_to_field": "custom_student_signature1",
-            // "content": record['signature'],
-            // "encoding": "base64"
-            // "filename": "${record['name']}.png",
-            // "is_private": 0,
-            // "doctype": "Student Attendance",
-            // "docname": record['name'],
-            // "fieldname": "custom_student_signature1",
-            // // "filedata": "data:image/png;base64,${record['signature']}"
-            // "filedata": "${record['signature']}"
-            "filename": "${record['name']}.png",
-            "filedata": record['signature'],  // no prefix
-            "is_private": 0,
-            "doctype": "Student Attendance",
-            "docname": record['name'],
-            "fieldname": "custom_student_signature1",
-            "decode_base64": true  // <-- helps Frappe auto-save the PNG
-          }),
+            Uri.parse('http://192.168.100.10:8003/api/method/frappe.client.attach_file'),
+            headers: {
+              'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
+              'Content-Type': 'application/json'
+            },
+            // body: jsonEncode({
+            //   "filename": "${record['name']}.png",
+            //   "is_private": 0,
+            //   "doctype": "Student Attendance",
+            //   "docname": record['name'],
+            //   "fieldname": "custom_student_signature1",
+            //   "filedata": "data:image/png;base64,${record['signature']}"
+            // }),
+            body: jsonEncode({
+              "filename": "${record['name']}.png",
+              "filedata": record['signature'],  // no prefix
+              "is_private": 0,
+              "doctype": "Student Attendance",
+              "docname": record['name'],
+              "fieldname": "custom_student_signature1",
+              "decode_base64": true  // <-- helps Frappe auto-save the PNG
+            })
         );
 
         if (uploadResponse.statusCode == 200) {
           final uploaded = jsonDecode(uploadResponse.body);
           final fileUrl = uploaded['message']['file_url'];
 
-          final url = Uri.parse('http://192.168.100.10:8003/api/resource/Student%20Attendance/${record['name']}');
           final response = await http.put(
-            url,
+            Uri.parse('http://192.168.100.10:8003/api/resource/Student%20Attendance/${record['name']}'),
             headers: {
               'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
               'Content-Type': 'application/json'
@@ -200,16 +235,9 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
             }),
           );
 
-          print("PUT ${record['name']} => ${response.statusCode}");
-          print("Response: ${response.body}");
-
           if (response.statusCode == 200) {
             await db.update('attendance', {'synced': 1}, where: 'name = ?', whereArgs: [record['name']]);
-          } else {
-            print("Failed to sync ${record['name']} => ${response.body}");
           }
-        } else {
-          print("Upload failed for ${record['name']}: ${uploadResponse.body}");
         }
       } catch (e) {
         print("Sync error for ${record['name']}: $e");
@@ -217,8 +245,51 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
     }
   }
 
+  Future<void> exportToCSV() async {
+    final rows = <List<String>>[
+      ['Name', 'Student', 'Status', 'Date', 'Synced']
+    ];
+    for (var row in attendanceList) {
+      rows.add([
+        row['name'],
+        row['student'],
+        row['status'],
+        row['date'],
+        row['synced'].toString()
+      ]);
+    }
+
+    final dir = await getExternalStorageDirectory();
+    final file = File('${dir!.path}/attendance.csv');
+    await file.writeAsString(const ListToCsvConverter().convert(rows));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('CSV exported to ${file.path}')),
+    );
+  }
+
+  // void captureSignature(String name) async {
+  //   final controller = SignatureController();
+  //   final result = await Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (context) => SignaturePad(controller: controller),
+  //     ),
+  //   );
+  //
+  //   if (result != null && result is String) {
+  //     await db.update('attendance', {'signature': result, 'synced': 0}, where: 'name = ?', whereArgs: [name]);
+  //     await loadLocal();
+  //     await syncToServer();
+  //   }
+  // }
   void captureSignature(String name) async {
-    final controller = SignatureController();
+    final controller = SignatureController(
+      penStrokeWidth: 3,
+      penColor: Colors.black,
+      exportBackgroundColor: Colors.white,
+    );
+
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -227,29 +298,65 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
     );
 
     if (result != null && result is String) {
-      await db.update('attendance', {'signature': result, 'synced': 0}, where: 'name = ?', whereArgs: [name]);
+      await db.update('attendance', {
+        'signature': result,
+        'synced': 0,
+      }, where: 'name = ?', whereArgs: [name]);
       await loadLocal();
       await syncToServer();
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
-    final filtered = attendanceList.where((item) => selectedGroup == 'All' || item['student_group'] == selectedGroup).toList();
+    final filtered = attendanceList.where((item) {
+      final groupMatch = selectedGroup == 'All' || item['student_group'] == selectedGroup;
+      final statusMatch = selectedStatus == 'All' || item['status'] == selectedStatus;
+      return groupMatch && statusMatch;
+    }).toList();
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Attendance List")),
+      appBar: AppBar(
+        title: const Text("Attendance List"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.sync),
+            onPressed: () async {
+              await syncToServer();
+              await loadLocal();
+            },
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: exportToCSV,
+        child: const Icon(Icons.download),
+      ),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: DropdownButton<String>(
-              value: selectedGroup,
-              items: groups.map((group) => DropdownMenuItem(value: group, child: Text(group))).toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedGroup = value!;
-                });
-              },
+            child: Row(
+              children: [
+                Expanded(
+                  child: DropdownButton<String>(
+                    value: selectedGroup,
+                    isExpanded: true,
+                    items: groups.map((group) => DropdownMenuItem(value: group, child: Text(group))).toList(),
+                    onChanged: (value) => setState(() => selectedGroup = value!),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButton<String>(
+                    value: selectedStatus,
+                    isExpanded: true,
+                    items: statuses.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                    onChanged: (value) => setState(() => selectedStatus = value!),
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -259,11 +366,21 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
               itemCount: filtered.length,
               itemBuilder: (BuildContext context, int index) {
                 final item = filtered[index];
+                final isSynced = item['synced'] == 1;
                 return ListTile(
                   title: Text("${item['student_name']} (${item['student']})"),
-                  subtitle: Text(
-                    "Course: ${item['course_schedule']} | Group: ${item['student_group']} | Date: ${item['date']}\n"
-                        "Status: ${item['status']} | Customer: ${item['customer_name']}",
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Course: ${item['course_schedule']} | Group: ${item['student_group']} | Date: ${item['date']}\nStatus: ${item['status']} | Customer: ${item['customer_name']}\nSynced: ${isSynced ? 'Yes' : 'No'}",
+                      ),
+                      if (item['signature'] != '')
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Image.memory(base64Decode(item['signature']), height: 50),
+                        )
+                    ],
                   ),
                   trailing: IconButton(
                     icon: const Icon(Icons.edit),
