@@ -167,12 +167,20 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
             // "attached_to_field": "custom_student_signature1",
             // "content": record['signature'],
             // "encoding": "base64"
+            // "filename": "${record['name']}.png",
+            // "is_private": 0,
+            // "doctype": "Student Attendance",
+            // "docname": record['name'],
+            // "fieldname": "custom_student_signature1",
+            // // "filedata": "data:image/png;base64,${record['signature']}"
+            // "filedata": "${record['signature']}"
             "filename": "${record['name']}.png",
+            "filedata": record['signature'],  // no prefix
             "is_private": 0,
             "doctype": "Student Attendance",
             "docname": record['name'],
             "fieldname": "custom_student_signature1",
-            "filedata": "data:image/png;base64,${record['signature']}"
+            "decode_base64": true  // <-- helps Frappe auto-save the PNG
           }),
         );
 
