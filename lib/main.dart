@@ -162,18 +162,21 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
         final data = json.decode(response.body);
         final List items = data['data'];
         for (var record in items) {
-          await db.insert('attendance', {
-            'name': record['name'],
-            'student': record['student'],
-            'student_name': record['student_name'],
-            'course_schedule': record['course_schedule'],
-            'student_group': record['student_group'],
-            'date': record['date'],
-            'status': record['status'],
-            'customer_name': record['customer_name'],
-            'signature': '',
-            'synced': 0,
-          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          await db.insert(
+              'attendance',
+              {
+                'name': record['name'],
+                'student': record['student'],
+                'student_name': record['student_name'],
+                'course_schedule': record['course_schedule'],
+                'student_group': record['student_group'],
+                'date': record['date'],
+                'status': record['status'],
+                'customer_name': record['customer_name'],
+                'signature': '',
+                'synced': 0,
+              },
+              conflictAlgorithm: ConflictAlgorithm.ignore);
         }
       }
     } catch (e) {
@@ -183,7 +186,8 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
 
   Future<void> loadLocal() async {
     final data = await db.query('attendance');
-    final allGroups = data.map((e) => e['student_group'].toString()).toSet().toList();
+    final allGroups =
+    data.map((e) => e['student_group'].toString()).toSet().toList();
     setState(() {
       groups = ['All', ...allGroups];
       attendanceList = data;
@@ -192,11 +196,13 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
 
   Future<void> syncToServer() async {
     if (!isOnline) return;
-    final unsynced = await db.query('attendance', where: 'synced = 0 AND signature != ""');
+    final unsynced =
+    await db.query('attendance', where: 'synced = 0 AND signature != ""');
     for (var record in unsynced) {
       try {
         final uploadResponse = await http.post(
-            Uri.parse('http://192.168.100.10:8003/api/method/frappe.client.attach_file'),
+            Uri.parse(
+                'http://192.168.100.10:8003/api/method/frappe.client.attach_file'),
             headers: {
               'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
               'Content-Type': 'application/json'
@@ -211,32 +217,32 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
             // }),
             body: jsonEncode({
               "filename": "${record['name']}.png",
-              "filedata": record['signature'],  // no prefix
+              "filedata": record['signature'], // no prefix
               "is_private": 0,
               "doctype": "Student Attendance",
               "docname": record['name'],
               "fieldname": "custom_student_signature1",
-              "decode_base64": true  // <-- helps Frappe auto-save the PNG
-            })
-        );
+              "decode_base64": true // <-- helps Frappe auto-save the PNG
+            }));
 
         if (uploadResponse.statusCode == 200) {
           final uploaded = jsonDecode(uploadResponse.body);
           final fileUrl = uploaded['message']['file_url'];
 
           final response = await http.put(
-            Uri.parse('http://192.168.100.10:8003/api/resource/Student%20Attendance/${record['name']}'),
+            Uri.parse(
+                'http://192.168.100.10:8003/api/resource/Student%20Attendance/${record['name']}'),
             headers: {
               'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
               'Content-Type': 'application/json'
             },
-            body: jsonEncode({
-              'custom_student_signature1': fileUrl,
-            }),
+            body: jsonEncode(
+                {'custom_student_signature1': fileUrl, 'docstatus': 1}),
           );
 
           if (response.statusCode == 200) {
-            await db.update('attendance', {'synced': 1}, where: 'name = ?', whereArgs: [record['name']]);
+            await db.update('attendance', {'synced': 1},
+                where: 'name = ?', whereArgs: [record['name']]);
           }
         }
       } catch (e) {
@@ -298,21 +304,26 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
     );
 
     if (result != null && result is String) {
-      await db.update('attendance', {
-        'signature': result,
-        'synced': 0,
-      }, where: 'name = ?', whereArgs: [name]);
+      await db.update(
+          'attendance',
+          {
+            'signature': result,
+            'synced': 0,
+          },
+          where: 'name = ?',
+          whereArgs: [name]);
       await loadLocal();
       await syncToServer();
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final filtered = attendanceList.where((item) {
-      final groupMatch = selectedGroup == 'All' || item['student_group'] == selectedGroup;
-      final statusMatch = selectedStatus == 'All' || item['status'] == selectedStatus;
+      final groupMatch =
+          selectedGroup == 'All' || item['student_group'] == selectedGroup;
+      final statusMatch =
+          selectedStatus == 'All' || item['status'] == selectedStatus;
       return groupMatch && statusMatch;
     }).toList();
 
@@ -343,8 +354,12 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
                   child: DropdownButton<String>(
                     value: selectedGroup,
                     isExpanded: true,
-                    items: groups.map((group) => DropdownMenuItem(value: group, child: Text(group))).toList(),
-                    onChanged: (value) => setState(() => selectedGroup = value!),
+                    items: groups
+                        .map((group) =>
+                        DropdownMenuItem(value: group, child: Text(group)))
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => selectedGroup = value!),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -352,8 +367,11 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
                   child: DropdownButton<String>(
                     value: selectedStatus,
                     isExpanded: true,
-                    items: statuses.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                    onChanged: (value) => setState(() => selectedStatus = value!),
+                    items: statuses
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (value) =>
+                        setState(() => selectedStatus = value!),
                   ),
                 ),
               ],
@@ -368,7 +386,8 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
                 final item = filtered[index];
                 final isSynced = item['synced'] == 1;
                 return ListTile(
-                  title: Text("${item['student_name']} (${item['student']})"),
+                  title: Text(
+                      "${item['student_name']} (${item['student']})"),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -378,7 +397,9 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
                       if (item['signature'] != '')
                         Padding(
                           padding: const EdgeInsets.only(top: 8.0),
-                          child: Image.memory(base64Decode(item['signature']), height: 50),
+                          child: Image.memory(
+                              base64Decode(item['signature']),
+                              height: 50),
                         )
                     ],
                   ),
