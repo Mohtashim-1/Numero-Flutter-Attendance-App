@@ -10,7 +10,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
 import 'package:path/path.dart' as p;
 
-const String baseUrl = 'http://192.168.100.10:8003';
+const String baseUrl = 'https://numerouno-uat.u.frappe.cloud';
+const String apiToken = 'token 8a893b8d854cbe5:ea4c207706bd484';
 
 void main() {
   runApp(const AttendanceApp());
@@ -195,7 +196,7 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
         '$baseUrl/api/resource/Student Attendance?fields=["name","student","student_name","course_schedule","student_group","date","status","customer_name","docstatus"]&filters=[["docstatus","=",0]]&limit_page_length=1000');
     try {
       final response = await http.get(url, headers: {
-        'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
+        'Authorization': apiToken,
       });
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -249,25 +250,17 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
         final uploadResponse = await http.post(
             Uri.parse('$baseUrl/api/method/frappe.client.attach_file'),
             headers: {
-              'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
+              'Authorization': apiToken,
               'Content-Type': 'application/json'
             },
-            // body: jsonEncode({
-            //   "filename": "${record['name']}.png",
-            //   "is_private": 0,
-            //   "doctype": "Student Attendance",
-            //   "docname": record['name'],
-            //   "fieldname": "custom_student_signature1",
-            //   "filedata": "data:image/png;base64,${record['signature']}"
-            // }),
             body: jsonEncode({
               "filename": "${record['name']}.png",
-              "filedata": record['signature'], // no prefix
+              "filedata": record['signature'],
               "is_private": 0,
               "doctype": "Student Attendance",
               "docname": record['name'],
               "fieldname": "custom_student_signature1",
-              "decode_base64": true // <-- helps Frappe auto-save the PNG
+              "decode_base64": true
             }));
 
         if (uploadResponse.statusCode == 200) {
@@ -278,7 +271,7 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
             Uri.parse(
                 '$baseUrl/api/resource/Student%20Attendance/${record['name']}'),
             headers: {
-              'Authorization': 'token cefea2fba4f0821:98bc3f8b6d96741',
+              'Authorization': apiToken,
               'Content-Type': 'application/json'
             },
             body: jsonEncode(
