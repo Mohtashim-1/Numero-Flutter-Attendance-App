@@ -13,6 +13,7 @@ import 'package:camera/camera.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 const String baseUrl = 'https://numerouno-uat.u.frappe.cloud';
 const String apiToken = 'token 8a893b8d854cbe5:ea4c207706bd484';
@@ -27,9 +28,16 @@ class AttendanceApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Student Attendance',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      title: 'numero UNO',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.blue.shade700,
+          foregroundColor: Colors.white,
+        ),
+      ),
       home: const LoginPage(),
+      debugShowCheckedModeBanner: false, // Remove debug banner
     );
   }
 }
@@ -72,27 +80,102 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Login')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(labelText: 'Username'),
-            ),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: login,
-              child: const Text('Login'),
-            )
-          ],
+      appBar: AppBar(
+        title: const Text('numero UNO'),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24.0),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: MediaQuery.of(context).size.height -
+                MediaQuery.of(context).padding.top -
+                kToolbarHeight -
+                48, // 48 for padding
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // NFC Logo
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blue.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: SvgPicture.asset(
+                  'assets/images/nfc_logo.svg',
+                  width: 120,
+                  height: 120,
+                ),
+              ),
+
+              // Login Form
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(15),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _usernameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Username',
+                        prefixIcon: Icon(Icons.person),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: Icon(Icons.lock),
+                        border: OutlineInputBorder(),
+                      ),
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 30),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: login,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text(
+                          'Login',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -390,7 +473,14 @@ class _AttendanceListPageState extends State<AttendanceListPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Attendance List"),
+        title: Row(
+          children: [
+            const Icon(Icons.nfc, size: 28),
+            const SizedBox(width: 10),
+            const Text("Attendance List"),
+          ],
+        ),
+        centerTitle: true,
         actions: [
           Icon(
             isOnline ? Icons.wifi : Icons.wifi_off,
@@ -576,7 +666,16 @@ class SignaturePad extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Sign Attendance")),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            const Icon(Icons.nfc, size: 24),
+            const SizedBox(width: 8),
+            const Text("Sign Attendance"),
+          ],
+        ),
+        centerTitle: true,
+      ),
       body: Column(
         children: [
           Padding(
@@ -630,7 +729,16 @@ class SubmittedAttendancePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Submitted Attendance")),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            const Icon(Icons.nfc, size: 24),
+            const SizedBox(width: 8),
+            const Text("Submitted Attendance"),
+          ],
+        ),
+        centerTitle: true,
+      ),
       body: ListView.builder(
         itemCount: submittedList.length,
         itemBuilder: (context, index) {
@@ -1821,7 +1929,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
   Widget build(BuildContext context) {
     if (!_isInitialized) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Emirates ID Scanner')),
+        appBar: AppBar(title: const Text('Numero UNO')),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1847,7 +1955,14 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Emirates ID Scanner'),
+        title: Row(
+          children: [
+            const Icon(Icons.nfc, size: 28),
+            const SizedBox(width: 10),
+            const Text('numero UNO'),
+          ],
+        ),
+        centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.info),
