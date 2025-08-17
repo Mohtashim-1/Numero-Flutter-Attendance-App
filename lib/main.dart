@@ -663,8 +663,27 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
   List<CameraDescription>? _cameras;
   bool _isInitialized = false;
   bool _isScanning = false;
-  Map<String, String> extractedData = {};
+  Map<String, String> extractedDataFront = {};
+  Map<String, String> extractedDataBack = {};
   final ImagePicker _picker = ImagePicker();
+  String? frontImagePath;
+  String? backImagePath;
+
+  // Controllers for editable fields
+  final TextEditingController firstNameController = TextEditingController();
+  final TextEditingController lastNameController = TextEditingController();
+  final TextEditingController eidNoController = TextEditingController();
+  final TextEditingController dobController = TextEditingController();
+  final TextEditingController nationalityController = TextEditingController();
+  final TextEditingController genderController = TextEditingController();
+  final TextEditingController addressController = TextEditingController();
+  final TextEditingController cardNumberController = TextEditingController();
+  final TextEditingController occupationController = TextEditingController();
+  final TextEditingController employerController = TextEditingController();
+  final TextEditingController issuingPlaceController = TextEditingController();
+  final TextEditingController bloodTypeController = TextEditingController();
+  final TextEditingController emergencyContactController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -711,7 +730,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
     }
   }
 
-  Future<void> _captureAndScan() async {
+  Future<void> _captureAndScan(String side) async {
     if (_controller == null || !_controller!.value.isInitialized) {
       return;
     }
@@ -722,7 +741,17 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
 
     try {
       final image = await _controller!.takePicture();
-      await _processImage(image.path);
+      if (side == 'front') {
+        setState(() {
+          frontImagePath = image.path;
+        });
+        await _processImage(image.path, 'front');
+      } else {
+        setState(() {
+          backImagePath = image.path;
+        });
+        await _processImage(image.path, 'back');
+      }
     } catch (e) {
       print('Error capturing image: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -735,7 +764,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
     }
   }
 
-  Future<void> _uploadAndScan() async {
+  Future<void> _uploadAndScan(String side) async {
     try {
       setState(() {
         _isScanning = true;
@@ -797,7 +826,17 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
         );
 
         if (image != null) {
-          await _processImage(image.path);
+          if (side == 'front') {
+            setState(() {
+              frontImagePath = image.path;
+            });
+            await _processImage(image.path, 'front');
+          } else {
+            setState(() {
+              backImagePath = image.path;
+            });
+            await _processImage(image.path, 'back');
+          }
         }
       } catch (e) {
         print('Image picker error: $e');
@@ -819,35 +858,6 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
         _isScanning = false;
       });
     }
-  }
-
-  void _showEmulatorFallbackDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Emulator Detected'),
-          content: const Text(
-            'Image picker is not available in emulator.\n\n'
-            'Please use "Test OCR (Sample Data)" to test the OCR functionality, '
-            'or run the app on a physical device for full camera and gallery features.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _testOCRWithSampleData();
-              },
-              child: const Text('Test OCR Now'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _showPermissionDialog() {
@@ -878,7 +888,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
     );
   }
 
-  Future<void> _processImage(String imagePath) async {
+  Future<void> _processImage(String imagePath, String side) async {
     try {
       final inputImage = InputImage.fromFilePath(imagePath);
       final textRecognizer = GoogleMlKit.vision.textRecognizer();
@@ -895,25 +905,76 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
           fullText += lineText + '\n';
 
           // Extract Emirates ID information based on common patterns
-          _extractEmiratesIDData(lineText, data);
+          _extractEmiratesIDData(lineText, data, side);
         }
       }
 
-      print('Full extracted text:');
+      print('Full extracted text for $side:');
       print(fullText);
-      print('\nExtracted Emirates ID data:');
+      print('\nExtracted Emirates ID data for $side:');
       data.forEach((key, value) {
         print('$key: $value');
       });
 
       setState(() {
-        extractedData = data;
+        if (side == 'front') {
+          extractedDataFront = data;
+          // Update the text controllers with extracted data
+          if (data.containsKey('Name')) {
+            String fullName = data['Name']!;
+            List<String> nameParts = fullName.split(' ');
+            if (nameParts.isNotEmpty) {
+              firstNameController.text = nameParts.first;
+              if (nameParts.length > 1) {
+                lastNameController.text = nameParts.sublist(1).join(' ');
+              }
+            }
+          }
+          if (data.containsKey('ID Number')) {
+            eidNoController.text = data['ID Number']!;
+          }
+          if (data.containsKey('Date of Birth')) {
+            dobController.text = data['Date of Birth']!;
+          }
+          if (data.containsKey('Nationality')) {
+            nationalityController.text = data['Nationality']!;
+          }
+          if (data.containsKey('Sex')) {
+            genderController.text = data['Sex']!;
+          }
+        } else {
+          extractedDataBack = data;
+          // Update the text controllers with extracted data
+          if (data.containsKey('Address')) {
+            addressController.text = data['Address']!;
+          }
+          if (data.containsKey('Card Number')) {
+            cardNumberController.text = data['Card Number']!;
+          }
+          if (data.containsKey('Occupation')) {
+            occupationController.text = data['Occupation']!;
+          }
+          if (data.containsKey('Employer')) {
+            employerController.text = data['Employer']!;
+          }
+          if (data.containsKey('Issuing Place')) {
+            issuingPlaceController.text = data['Issuing Place']!;
+          }
+          if (data.containsKey('Blood Type')) {
+            bloodTypeController.text = data['Blood Type']!;
+          }
+          if (data.containsKey('Emergency Contact')) {
+            emergencyContactController.text = data['Emergency Contact']!;
+          }
+        }
+
+        // Show data preview dialog after both sides are scanned
+        if (extractedDataFront.isNotEmpty && extractedDataBack.isNotEmpty) {
+          _showDataPreviewDialog();
+        }
       });
 
       textRecognizer.close();
-
-      // Show results dialog
-      _showResultsDialog(data, fullText);
     } catch (e) {
       print('Error processing image: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -922,226 +983,167 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
     }
   }
 
-  void _testOCRWithSampleData() {
-    // Test function with sample Emirates ID data
-    Map<String, String> testData = {};
-    String sampleText = '''
-UNITED ARAB EMIRATES
-FEDERAL AUTHORITY FOR IDENTITY & CITIZENSHIP
-Identity Card
-
-Name: Hamad Salem Naser
-الإسم: حمد سالم ناصر
-ID Number: 784-1234-1134567-1
-رقم الهوية: 784-1234-1134567-1
-Date of Birth: 29/09/2004
-تاريخ الميلاد: 29/09/2004
-Nationality: United Arab Emirates
-الجنسية: الإمارات العربية المتحدة
-Sex: M
-الجنس: ذكر
-Issuing Date: 08/08/2021
-تاريخ الإصدار: 08/08/2021
-Expiry Date: 20/09/2029
-تاريخ الإنتهاء: 20/09/2029
-''';
-
-    // Process each line
-    for (String line in sampleText.split('\n')) {
-      _extractEmiratesIDData(line, testData);
-    }
-
-    print('=== TEST OCR WITH SAMPLE DATA ===');
-    print('Sample text:');
-    print(sampleText);
-    print('\nExtracted data:');
-    testData.forEach((key, value) {
-      print('$key: $value');
-    });
-
-    setState(() {
-      extractedData = testData;
-    });
-
-    _showResultsDialog(testData, sampleText);
-  }
-
-  void _testMultipleScenarios() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Test Different Emirates ID Scenarios'),
-          content: const Text(
-            'Choose a test scenario to simulate different Emirates ID formats:',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _testScenario1();
-              },
-              child: const Text('Scenario 1: Standard ID'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _testScenario2();
-              },
-              child: const Text('Scenario 2: Different Name'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _testScenario3();
-              },
-              child: const Text('Scenario 3: Female ID'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _testScenario1() {
-    Map<String, String> testData = {};
-    String sampleText = '''
-UNITED ARAB EMIRATES
-FEDERAL AUTHORITY FOR IDENTITY & CITIZENSHIP
-Identity Card
-
-Name: Ahmed Mohammed Al Mansouri
-الإسم: أحمد محمد المنصوري
-ID Number: 784-1985-1234567-8
-رقم الهوية: 784-1985-1234567-8
-Date of Birth: 15/03/1985
-تاريخ الميلاد: 15/03/1985
-Nationality: United Arab Emirates
-الجنسية: الإمارات العربية المتحدة
-Sex: M
-الجنس: ذكر
-Issuing Date: 12/01/2020
-تاريخ الإصدار: 12/01/2020
-Expiry Date: 11/01/2030
-تاريخ الإنتهاء: 11/01/2030
-''';
-
-    _processTestData(testData, sampleText, 'Scenario 1: Standard Male ID');
-  }
-
-  void _testScenario2() {
-    Map<String, String> testData = {};
-    String sampleText = '''
-UNITED ARAB EMIRATES
-FEDERAL AUTHORITY FOR IDENTITY & CITIZENSHIP
-Identity Card
-
-Name: Fatima Zahra Al Qassimi
-الإسم: فاطمة الزهراء القاسمي
-ID Number: 784-1990-9876543-2
-رقم الهوية: 784-1990-9876543-2
-Date of Birth: 22/07/1990
-تاريخ الميلاد: 22/07/1990
-Nationality: United Arab Emirates
-الجنسية: الإمارات العربية المتحدة
-Sex: F
-الجنس: أنثى
-Issuing Date: 05/06/2019
-تاريخ الإصدار: 05/06/2019
-Expiry Date: 04/06/2029
-تاريخ الإنتهاء: 04/06/2029
-''';
-
-    _processTestData(testData, sampleText, 'Scenario 2: Female ID');
-  }
-
-  void _testScenario3() {
-    Map<String, String> testData = {};
-    String sampleText = '''
-UNITED ARAB EMIRATES
-FEDERAL AUTHORITY FOR IDENTITY & CITIZENSHIP
-Identity Card
-
-Name: Omar Khalid Al Falasi
-الإسم: عمر خالد الفلاسي
-ID Number: 784-1978-5555555-5
-رقم الهوية: 784-1978-5555555-5
-Date of Birth: 08/12/1978
-تاريخ الميلاد: 08/12/1978
-Nationality: United Arab Emirates
-الجنسية: الإمارات العربية المتحدة
-Sex: M
-الجنس: ذكر
-Issuing Date: 20/03/2018
-تاريخ الإصدار: 20/03/2018
-Expiry Date: 19/03/2028
-تاريخ الإنتهاء: 19/03/2028
-''';
-
-    _processTestData(testData, sampleText, 'Scenario 3: Different Male ID');
-  }
-
-  void _processTestData(
-      Map<String, String> testData, String sampleText, String scenarioName) {
-    // Process each line
-    for (String line in sampleText.split('\n')) {
-      _extractEmiratesIDData(line, testData);
-    }
-
-    print('=== $scenarioName ===');
-    print('Sample text:');
-    print(sampleText);
-    print('\nExtracted data:');
-    testData.forEach((key, value) {
-      print('$key: $value');
-    });
-
-    setState(() {
-      extractedData = testData;
-    });
-
-    _showResultsDialog(testData, sampleText);
-  }
-
-  Future<void> _uploadToFrappe(Map<String, String> data) async {
+  Future<void> _uploadToFrappe() async {
     try {
       setState(() {
         _isScanning = true;
       });
 
-      // Prepare the data for Frappe
-      String firstName = '';
-      String lastName = '';
-      String nationality = '';
-      String gender = '';
-      String eidNo = '';
+      // Get data from the editable fields
+      String firstName = firstNameController.text.trim();
+      String lastName = lastNameController.text.trim();
+      String nationality = nationalityController.text.trim();
+      String gender = genderController.text.trim();
+      String eidNo = eidNoController.text.trim();
+      String address = addressController.text.trim();
+      String cardNumber = cardNumberController.text.trim();
+      String occupation = occupationController.text.trim();
+      String employer = employerController.text.trim();
+      String issuingPlace = issuingPlaceController.text.trim();
+      String bloodType = bloodTypeController.text.trim();
+      String emergencyContact = emergencyContactController.text.trim();
 
-      // Extract data from the scanned Emirates ID
-      if (data.containsKey('Name')) {
-        String fullName = data['Name']!;
-        List<String> nameParts = fullName.split(' ');
-        if (nameParts.length >= 2) {
-          firstName = nameParts[0];
-          lastName = nameParts.sublist(1).join(' ');
-        } else {
-          firstName = fullName;
+      // Convert gender format from Emirates ID (M/F) to Frappe format (Male/Female)
+      String frappeGender = gender;
+      if (gender.toUpperCase() == 'M') {
+        frappeGender = 'Male';
+      } else if (gender.toUpperCase() == 'F') {
+        frappeGender = 'Female';
+      }
+
+      // Handle employer/customer validation and creation
+      String customerName = '';
+      if (employer.isNotEmpty) {
+        try {
+          // First, check if customer exists
+          final customerCheckResponse = await http.get(
+            Uri.parse(
+                '$baseUrl/api/resource/Customer?filters=[["customer_name","=","$employer"]]'),
+            headers: {
+              'Authorization': apiToken,
+              'Content-Type': 'application/json',
+            },
+          );
+
+          if (customerCheckResponse.statusCode == 200) {
+            final customerData = jsonDecode(customerCheckResponse.body);
+            if (customerData['data'] != null &&
+                customerData['data'].isNotEmpty) {
+              // Customer exists, use the existing customer name
+              customerName = customerData['data'][0]['name'];
+              print('Found existing customer: $customerName');
+            } else {
+              // Customer doesn't exist, try to create new customer
+              print('Customer not found, attempting to create: $employer');
+
+              // Try multiple approaches to create customer
+              bool customerCreated = false;
+
+              // Approach 1: Direct Customer creation (minimal fields)
+              try {
+                final createCustomerResponse = await http.post(
+                  Uri.parse('$baseUrl/api/resource/Customer'),
+                  headers: {
+                    'Authorization': apiToken,
+                    'Content-Type': 'application/json',
+                  },
+                  body: jsonEncode({
+                    'doctype': 'Customer',
+                    'customer_name': employer,
+                  }),
+                );
+
+                if (createCustomerResponse.statusCode == 200 ||
+                    createCustomerResponse.statusCode == 201) {
+                  final newCustomerData =
+                      jsonDecode(createCustomerResponse.body);
+                  customerName = newCustomerData['data']['name'];
+                  print('Successfully created new customer: $customerName');
+                  customerCreated = true;
+                } else {
+                  print(
+                      'Failed to create customer: ${createCustomerResponse.body}');
+                }
+              } catch (e) {
+                print('Error in direct customer creation: $e');
+              }
+
+              // Approach 2: Try with Company type if first fails
+              if (!customerCreated) {
+                try {
+                  final createCustomerResponse2 = await http.post(
+                    Uri.parse('$baseUrl/api/resource/Customer'),
+                    headers: {
+                      'Authorization': apiToken,
+                      'Content-Type': 'application/json',
+                    },
+                    body: jsonEncode({
+                      'doctype': 'Customer',
+                      'customer_name': employer,
+                      'customer_type': 'Company',
+                    }),
+                  );
+
+                  if (createCustomerResponse2.statusCode == 200 ||
+                      createCustomerResponse2.statusCode == 201) {
+                    final newCustomerData =
+                        jsonDecode(createCustomerResponse2.body);
+                    customerName = newCustomerData['data']['name'];
+                    print(
+                        'Successfully created new customer (Individual): $customerName');
+                    customerCreated = true;
+                  } else {
+                    print(
+                        'Failed to create customer (Individual): ${createCustomerResponse2.body}');
+                  }
+                } catch (e) {
+                  print('Error in individual customer creation: $e');
+                }
+              }
+
+              // If both approaches failed, show warning
+              if (!customerCreated) {
+                // Show user-friendly message about customer creation failure
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                        '⚠️ Note: Could not create customer for employer "$employer". Student will be created without customer link.'),
+                    backgroundColor: Colors.orange,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+                // Continue without customer if creation fails
+              }
+            }
+          } else {
+            print(
+                'Failed to check customer existence: ${customerCheckResponse.body}');
+          }
+        } catch (e) {
+          print('Error handling customer: $e');
+          // Show user-friendly error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  '⚠️ Note: Error checking customer for employer "$employer". Student will be created without customer link.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          // Continue without customer if there's an error
         }
       }
 
-      if (data.containsKey('Nationality')) {
-        nationality = data['Nationality']!;
-      }
-
-      if (data.containsKey('Sex')) {
-        gender = data['Sex']!;
-      }
-
-      if (data.containsKey('ID Number')) {
-        eidNo = data['ID Number']!;
+      // Validate required fields
+      if (firstName.isEmpty || lastName.isEmpty || eidNo.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Please fill in First Name, Last Name, and ID Number'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
       }
 
       // Create the request payload
@@ -1150,11 +1152,44 @@ Expiry Date: 19/03/2028
         'first_name': firstName,
         'last_name': lastName,
         'nationality': nationality,
-        'gender': gender,
+        'gender': frappeGender,
         'custom_eid_no': eidNo,
+        'custom_address': address,
+        'custom_card_number': cardNumber,
+        'custom_occupation': occupation,
+        'custom_employer': employer,
+        'custom_issuing_place': issuingPlace,
+        'custom_blood_type': bloodType,
+        'custom_emergency_contact': emergencyContact,
       };
 
+      // Add customer_name if available
+      if (customerName.isNotEmpty) {
+        payload['customer_name'] = customerName;
+      } else if (employer.isNotEmpty) {
+        // If customer creation failed, store employer name in a custom field
+        payload['custom_employer_name'] = employer;
+      }
+
       print('Uploading to Frappe with payload: $payload');
+
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Uploading to Frappe...'),
+            content: const Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 20),
+                Text('Please wait...'),
+              ],
+            ),
+          );
+        },
+      );
 
       // Make the API call to Frappe
       final response = await http.post(
@@ -1166,17 +1201,115 @@ Expiry Date: 19/03/2028
         body: jsonEncode(payload),
       );
 
+      // Close loading dialog
+      Navigator.of(context).pop();
+
       print('Frappe response status: ${response.statusCode}');
       print('Frappe response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final responseData = jsonDecode(response.body);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Successfully uploaded to Frappe! Student ID: ${responseData['data']['name'] ?? 'N/A'}'),
-            backgroundColor: Colors.green,
-          ),
+
+        // Show success dialog with details
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 30),
+                  SizedBox(width: 10),
+                  Text('✅ Upload Successful!'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Student ID: ${responseData['data']['name'] ?? 'N/A'}',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 8),
+                        Text('Name: $firstName $lastName'),
+                        Text('ID Number: $eidNo'),
+                        Text('Nationality: $nationality'),
+                        Text('Gender: $frappeGender'),
+                        if (address.isNotEmpty) Text('Address: $address'),
+                        if (cardNumber.isNotEmpty)
+                          Text('Card Number: $cardNumber'),
+                        if (occupation.isNotEmpty)
+                          Text('Occupation: $occupation'),
+                        if (employer.isNotEmpty) Text('Employer: $employer'),
+                        if (customerName.isNotEmpty)
+                          Text('Customer: $customerName',
+                              style: TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold))
+                        else if (employer.isNotEmpty)
+                          Text('Customer: Not linked (permission issue)',
+                              style: TextStyle(
+                                  color: Colors.orange,
+                                  fontStyle: FontStyle.italic)),
+                        if (employer.isNotEmpty && customerName.isEmpty)
+                          Text('Employer stored in custom field',
+                              style: TextStyle(
+                                  color: Colors.blue,
+                                  fontStyle: FontStyle.italic)),
+                        if (issuingPlace.isNotEmpty)
+                          Text('Issuing Place: $issuingPlace'),
+                        if (bloodType.isNotEmpty)
+                          Text('Blood Type: $bloodType'),
+                        if (emergencyContact.isNotEmpty)
+                          Text('Emergency Contact: $emergencyContact'),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Data has been successfully uploaded to Frappe system!',
+                    style: TextStyle(
+                      color: Colors.green.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    // Clear the form after successful upload
+                    _clearForm();
+                    // Show a snackbar confirmation
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('✅ Form cleared. Ready for next scan!'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: Text('Continue'),
+                ),
+              ],
+            );
+          },
         );
       } else {
         throw Exception(
@@ -1184,6 +1317,12 @@ Expiry Date: 19/03/2028
       }
     } catch (e) {
       print('Error uploading to Frappe: $e');
+
+      // Close loading dialog if it's still open
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error uploading to Frappe: $e'),
@@ -1197,108 +1336,392 @@ Expiry Date: 19/03/2028
     }
   }
 
-  void _extractEmiratesIDData(String text, Map<String, String> data) {
-    // ID Number pattern: 784-XXXX-XXXXXXX-X
-    RegExp idPattern = RegExp(r'784-\d{4}-\d{7}-\d');
-    if (idPattern.hasMatch(text)) {
-      data['ID Number'] = idPattern.firstMatch(text)!.group(0)!;
-    }
+  void _showDataPreviewDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text(
+                '📋 Extracted Emirates ID Data',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+              content: Container(
+                width: double.maxFinite,
+                height: 400,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Please review and edit the extracted data:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildDialogDataField('First Name', firstNameController),
+                      _buildDialogDataField('Last Name', lastNameController),
+                      _buildDialogDataField('ID Number', eidNoController),
+                      _buildDialogDataField('Date of Birth', dobController),
+                      _buildDialogDataField(
+                          'Nationality', nationalityController),
+                      _buildDialogDataField('Gender', genderController),
+                      _buildDialogDataField('Address', addressController),
+                      _buildDialogDataField(
+                          'Card Number', cardNumberController),
+                      _buildDialogDataField('Occupation', occupationController),
+                      _buildDialogDataField('Employer', employerController),
+                      _buildDialogDataField(
+                          'Issuing Place', issuingPlaceController),
+                      _buildDialogDataField('Blood Type', bloodTypeController),
+                      _buildDialogDataField(
+                          'Emergency Contact', emergencyContactController),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    _clearForm();
+                  },
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.of(context).pop();
+                    await _uploadToFrappe();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Upload to Frappe'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
 
-    // Date patterns (DD/MM/YYYY or YYYY-MM-DD)
-    RegExp datePattern = RegExp(r'\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2}');
-    if (datePattern.hasMatch(text)) {
-      if (text.toLowerCase().contains('birth') ||
-          text.toLowerCase().contains('ميلاد')) {
-        data['Date of Birth'] = datePattern.firstMatch(text)!.group(0)!;
-      } else if (text.toLowerCase().contains('issue') ||
-          text.toLowerCase().contains('إصدار')) {
-        data['Issuing Date'] = datePattern.firstMatch(text)!.group(0)!;
-      } else if (text.toLowerCase().contains('expiry') ||
-          text.toLowerCase().contains('انتهاء')) {
-        data['Expiry Date'] = datePattern.firstMatch(text)!.group(0)!;
+  Widget _buildDialogDataField(String label, TextEditingController controller) {
+    String? helperText;
+
+    // Add helper text for gender field to show conversion
+    if (label == 'Gender') {
+      String genderValue = controller.text.trim().toUpperCase();
+      if (genderValue == 'M') {
+        helperText = 'Will be converted to "Male" in Frappe';
+      } else if (genderValue == 'F') {
+        helperText = 'Will be converted to "Female" in Frappe';
       }
     }
 
-    // Name patterns (English and Arabic)
-    if (text.contains('Name:') || text.contains('الإسم:')) {
-      String name =
-          text.replaceAll('Name:', '').replaceAll('الإسم:', '').trim();
-      if (name.isNotEmpty) {
-        data['Name'] = name;
+    // Add helper text for employer field to show customer creation
+    if (label == 'Employer') {
+      String employerValue = controller.text.trim();
+      if (employerValue.isNotEmpty) {
+        helperText = 'Will create/link customer in Frappe';
       }
     }
 
-    // Nationality patterns
-    if (text.contains('Nationality:') || text.contains('الجنسية:')) {
-      String nationality =
-          text.replaceAll('Nationality:', '').replaceAll('الجنسية:', '').trim();
-      if (nationality.isNotEmpty) {
-        data['Nationality'] = nationality;
-      }
-    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          helperText: helperText,
+          helperStyle: TextStyle(
+            color: Colors.blue.shade600,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
 
-    // Sex/Gender patterns
-    if (text.contains('Sex:') || text.contains('الجنس')) {
-      String sex = text.replaceAll('Sex:', '').replaceAll('الجنس', '').trim();
-      if (sex.isNotEmpty) {
-        data['Sex'] = sex;
-      }
-    }
+  void _clearForm() {
+    firstNameController.clear();
+    lastNameController.clear();
+    eidNoController.clear();
+    dobController.clear();
+    nationalityController.clear();
+    genderController.clear();
+    addressController.clear();
+    cardNumberController.clear();
+    occupationController.clear();
+    employerController.clear();
+    issuingPlaceController.clear();
+    bloodTypeController.clear();
+    emergencyContactController.clear();
+    setState(() {
+      extractedDataFront.clear();
+      extractedDataBack.clear();
+      frontImagePath = null;
+      backImagePath = null;
+    });
+  }
 
-    // UAE specific patterns
-    if (text.contains('UNITED ARAB EMIRATES') ||
-        text.contains('الإمارات العربية المتحدة')) {
-      data['Country'] = 'United Arab Emirates';
+  void _extractEmiratesIDData(
+      String text, Map<String, String> data, String side) {
+    if (side == 'front') {
+      // ID Number pattern: 784-XXXX-XXXXXXX-X
+      RegExp idPattern = RegExp(r'784-\d{4}-\d{7}-\d');
+      if (idPattern.hasMatch(text)) {
+        data['ID Number'] = idPattern.firstMatch(text)!.group(0)!;
+      }
+
+      // Date patterns (DD/MM/YYYY or YYYY-MM-DD)
+      RegExp datePattern = RegExp(r'\d{2}/\d{2}/\d{4}|\d{4}-\d{2}-\d{2}');
+      if (datePattern.hasMatch(text)) {
+        if (text.toLowerCase().contains('birth') ||
+            text.toLowerCase().contains('ميلاد')) {
+          data['Date of Birth'] = datePattern.firstMatch(text)!.group(0)!;
+        } else if (text.toLowerCase().contains('issue') ||
+            text.toLowerCase().contains('إصدار')) {
+          data['Issuing Date'] = datePattern.firstMatch(text)!.group(0)!;
+        } else if (text.toLowerCase().contains('expiry') ||
+            text.toLowerCase().contains('انتهاء')) {
+          data['Expiry Date'] = datePattern.firstMatch(text)!.group(0)!;
+        }
+      }
+
+      // Name patterns (English and Arabic)
+      if (text.contains('Name:') ||
+          text.contains('الإسم:') ||
+          text.contains('الاسم:')) {
+        String name = text
+            .replaceAll('Name:', '')
+            .replaceAll('الإسم:', '')
+            .replaceAll('الاسم:', '')
+            .trim();
+        if (name.isNotEmpty) {
+          data['Name'] = name;
+        }
+      } else if (text.contains('Name') &&
+          !text.contains('ID Number') &&
+          text.length > 5) {
+        // Fallback: if text contains "Name" but not "ID Number" and is long enough
+        String name = text.replaceAll('Name', '').trim();
+        if (name.isNotEmpty && name.length > 2) {
+          data['Name'] = name;
+        }
+      }
+
+      // Nationality patterns
+      if (text.contains('Nationality:') || text.contains('الجنسية:')) {
+        String nationality = text
+            .replaceAll('Nationality:', '')
+            .replaceAll('الجنسية:', '')
+            .trim();
+        if (nationality.isNotEmpty) {
+          data['Nationality'] = nationality;
+        }
+      } else if (text.contains('Nationality') && text.length > 10) {
+        // Fallback: if text contains "Nationality" and is long enough
+        String nationality = text.replaceAll('Nationality', '').trim();
+        if (nationality.isNotEmpty && nationality.length > 2) {
+          data['Nationality'] = nationality;
+        }
+      }
+
+      // Sex/Gender patterns
+      if (text.contains('Sex:') ||
+          text.contains('الجنس') ||
+          text.contains('M') ||
+          text.contains('F')) {
+        if (text.contains('Sex:')) {
+          String sex = text.replaceAll('Sex:', '').trim();
+          if (sex.isNotEmpty) {
+            data['Sex'] = sex;
+          }
+        } else if (text.contains('M') && !text.contains('MRZ')) {
+          data['Sex'] = 'M';
+        } else if (text.contains('F') && !text.contains('MRZ')) {
+          data['Sex'] = 'F';
+        }
+      }
+
+      // UAE specific patterns
+      if (text.contains('UNITED ARAB EMIRATES') ||
+          text.contains('الإمارات العربية المتحدة')) {
+        data['Country'] = 'United Arab Emirates';
+      }
+    } else if (side == 'back') {
+      // Card Number patterns
+      RegExp cardNumberPattern = RegExp(r'\d{9}');
+      if (cardNumberPattern.hasMatch(text) && text.contains('Card Number') ||
+          text.contains('رقم البطاقة')) {
+        data['Card Number'] = cardNumberPattern.firstMatch(text)!.group(0)!;
+      }
+
+      // Occupation patterns
+      if (text.contains('Occupation:') || text.contains('المهنة:')) {
+        String occupation =
+            text.replaceAll('Occupation:', '').replaceAll('المهنة:', '').trim();
+        if (occupation.isNotEmpty) {
+          data['Occupation'] = occupation;
+        }
+      }
+
+      // Employer patterns
+      if (text.contains('Employer:') || text.contains('صاحب العمل:')) {
+        String employer = text
+            .replaceAll('Employer:', '')
+            .replaceAll('صاحب العمل:', '')
+            .trim();
+        if (employer.isNotEmpty) {
+          data['Employer'] = employer;
+        }
+      }
+
+      // Issuing Place patterns
+      if (text.contains('Issuing Place:') || text.contains('مكان الإصدار:')) {
+        String issuingPlace = text
+            .replaceAll('Issuing Place:', '')
+            .replaceAll('مكان الإصدار:', '')
+            .trim();
+        if (issuingPlace.isNotEmpty) {
+          data['Issuing Place'] = issuingPlace;
+        }
+      }
+
+      // Address patterns
+      if (text.contains('Address:') || text.contains('العنوان:')) {
+        String address =
+            text.replaceAll('Address:', '').replaceAll('العنوان:', '').trim();
+        if (address.isNotEmpty) {
+          data['Address'] = address;
+        }
+      }
+
+      // Blood Type patterns
+      if (text.contains('Blood Type:') || text.contains('فصيلة الدم:')) {
+        String bloodType = text
+            .replaceAll('Blood Type:', '')
+            .replaceAll('فصيلة الدم:', '')
+            .trim();
+        if (bloodType.isNotEmpty) {
+          data['Blood Type'] = bloodType;
+        }
+      }
+
+      // Emergency Contact patterns
+      if (text.contains('Emergency Contact:') ||
+          text.contains('رقم الطوارئ:')) {
+        String emergencyContact = text
+            .replaceAll('Emergency Contact:', '')
+            .replaceAll('رقم الطوارئ:', '')
+            .trim();
+        if (emergencyContact.isNotEmpty) {
+          data['Emergency Contact'] = emergencyContact;
+        }
+      }
+
+      // Phone number patterns
+      RegExp phonePattern = RegExp(r'\+971-\d{2}-\d{7}');
+      if (phonePattern.hasMatch(text) &&
+          !data.containsKey('Emergency Contact')) {
+        data['Emergency Contact'] = phonePattern.firstMatch(text)!.group(0)!;
+      }
+
+      // QR Code patterns
+      if (text.contains('QR Code:') || text.contains('[QR Code Data]')) {
+        data['QR Code'] = 'Detected';
+      }
     }
   }
 
-  void _showResultsDialog(Map<String, String> data, String fullText) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Emirates ID Scan Results'),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Extracted Information:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                ...data.entries.map((entry) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text('${entry.key}: ${entry.value}'),
-                    )),
-                const SizedBox(height: 20),
-                const Text('Full Text:',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(fullText, style: const TextStyle(fontSize: 12)),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
+  Widget _buildDataField(String label, String field, String initialValue) {
+    TextEditingController controller;
+    switch (field) {
+      case 'firstName':
+        controller = firstNameController;
+        break;
+      case 'lastName':
+        controller = lastNameController;
+        break;
+      case 'eidNo':
+        controller = eidNoController;
+        break;
+      case 'dob':
+        controller = dobController;
+        break;
+      case 'nationality':
+        controller = nationalityController;
+        break;
+      case 'gender':
+        controller = genderController;
+        break;
+      case 'address':
+        controller = addressController;
+        break;
+      case 'cardNumber':
+        controller = cardNumberController;
+        break;
+      case 'occupation':
+        controller = occupationController;
+        break;
+      case 'employer':
+        controller = employerController;
+        break;
+      case 'issuingPlace':
+        controller = issuingPlaceController;
+        break;
+      case 'bloodType':
+        controller = bloodTypeController;
+        break;
+      case 'emergencyContact':
+        controller = emergencyContactController;
+        break;
+      default:
+        controller = TextEditingController();
+    }
+
+    // Set initial value if controller is empty
+    if (controller.text.isEmpty && initialValue.isNotEmpty) {
+      controller.text = initialValue;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        ),
+      ),
     );
   }
 
   @override
   void dispose() {
     _controller?.dispose();
+    firstNameController.dispose();
+    lastNameController.dispose();
+    eidNoController.dispose();
+    dobController.dispose();
+    nationalityController.dispose();
+    genderController.dispose();
+    addressController.dispose();
+    cardNumberController.dispose();
+    occupationController.dispose();
+    employerController.dispose();
+    issuingPlaceController.dispose();
+    bloodTypeController.dispose();
+    emergencyContactController.dispose();
     super.dispose();
   }
 
@@ -1343,11 +1766,12 @@ Expiry Date: 19/03/2028
                   return AlertDialog(
                     title: const Text('How to Use'),
                     content: const Text(
-                      '1. Position the Emirates ID card within the camera frame\n'
+                      '1. Scan or upload both front and back sides of the Emirates ID\n'
                       '2. Ensure good lighting and clear text\n'
-                      '3. Tap "Scan ID" to capture with camera OR "Upload Image" to select from gallery\n'
-                      '4. The app will extract and display the information\n'
-                      '5. View results to see extracted data and full text',
+                      '3. Use "Scan Front" and "Scan Back" buttons for camera capture\n'
+                      '4. Use "Upload Front" and "Upload Back" to select from gallery\n'
+                      '5. View results to see extracted data from both sides\n'
+                      '6. Upload complete data to Frappe system',
                     ),
                     actions: [
                       TextButton(
@@ -1364,7 +1788,9 @@ Expiry Date: 19/03/2028
       ),
       body: Column(
         children: [
+          // Camera preview section
           Expanded(
+            flex: 2,
             child: Container(
               margin: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -1385,7 +1811,7 @@ Expiry Date: 19/03/2028
                                   size: 64, color: Colors.grey),
                               SizedBox(height: 16),
                               Text(
-                                'Camera not available\nUse Upload Image instead',
+                                'Camera not available\nUse Upload buttons instead',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: Colors.grey),
                               ),
@@ -1396,12 +1822,81 @@ Expiry Date: 19/03/2028
               ),
             ),
           ),
+
+          // Front and Back image previews
+          Container(
+            height: 120,
+            child: Row(
+              children: [
+                // Front side preview
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.green, width: 2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: frontImagePath != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.file(
+                              File(frontImagePath!),
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.credit_card, color: Colors.green),
+                                SizedBox(height: 8),
+                                Text('Front Side',
+                                    style: TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                  ),
+                ),
+                // Back side preview
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.orange, width: 2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: backImagePath != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: Image.file(
+                              File(backImagePath!),
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.credit_card, color: Colors.orange),
+                                SizedBox(height: 8),
+                                Text('Back Side',
+                                    style: TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Control buttons
           Container(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
+                // Front side controls
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
@@ -1409,7 +1904,7 @@ Expiry Date: 19/03/2028
                                 _controller == null ||
                                 !_controller!.value.isInitialized)
                             ? null
-                            : _captureAndScan,
+                            : () => _captureAndScan('front'),
                         icon: _isScanning
                             ? const SizedBox(
                                 width: 20,
@@ -1423,8 +1918,10 @@ Expiry Date: 19/03/2028
                             : (_controller == null ||
                                     !_controller!.value.isInitialized)
                                 ? 'Camera Unavailable'
-                                : 'Scan ID'),
+                                : 'Scan Front'),
                         style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 12),
                         ),
@@ -1433,7 +1930,8 @@ Expiry Date: 19/03/2028
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: _isScanning ? null : _uploadAndScan,
+                        onPressed:
+                            _isScanning ? null : () => _uploadAndScan('front'),
                         icon: _isScanning
                             ? const SizedBox(
                                 width: 20,
@@ -1443,8 +1941,10 @@ Expiry Date: 19/03/2028
                               )
                             : const Icon(Icons.upload),
                         label:
-                            Text(_isScanning ? 'Uploading...' : 'Upload Image'),
+                            Text(_isScanning ? 'Uploading...' : 'Upload Front'),
                         style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 12),
                         ),
@@ -1452,33 +1952,110 @@ Expiry Date: 19/03/2028
                     ),
                   ],
                 ),
-                if (extractedData.isNotEmpty)
-                  Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: () => _showResultsDialog(extractedData, ''),
-                        icon: const Icon(Icons.visibility),
-                        label: const Text('View Results'),
+
+                const SizedBox(height: 12),
+
+                // Back side controls
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: (_isScanning ||
+                                _controller == null ||
+                                !_controller!.value.isInitialized)
+                            ? null
+                            : () => _captureAndScan('back'),
+                        icon: _isScanning
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.camera_alt),
+                        label: Text(_isScanning
+                            ? 'Scanning...'
+                            : (_controller == null ||
+                                    !_controller!.value.isInitialized)
+                                ? 'Camera Unavailable'
+                                : 'Scan Back'),
                         style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: () => _uploadToFrappe(extractedData),
-                        icon: const Icon(Icons.cloud_upload),
-                        label: const Text('Upload to Frappe'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12),
-                          backgroundColor: Colors.green,
+                          backgroundColor: Colors.orange,
                           foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
                         ),
                       ),
-                    ],
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            _isScanning ? null : () => _uploadAndScan('back'),
+                        icon: _isScanning
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.upload),
+                        label:
+                            Text(_isScanning ? 'Uploading...' : 'Upload Back'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // Review Data button
+                if (extractedDataFront.isNotEmpty ||
+                    extractedDataBack.isNotEmpty)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showDataPreviewDialog(),
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Review & Edit Extracted Data'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 16),
+                      ),
+                    ),
                   ),
+
+                if (extractedDataFront.isNotEmpty ||
+                    extractedDataBack.isNotEmpty)
+                  const SizedBox(height: 12),
+
+                // Upload to Frappe button
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: (firstNameController.text.isNotEmpty &&
+                            lastNameController.text.isNotEmpty &&
+                            eidNoController.text.isNotEmpty)
+                        ? () => _uploadToFrappe()
+                        : null,
+                    icon: const Icon(Icons.cloud_upload),
+                    label: const Text('Upload Complete Data to Frappe'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 16),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
