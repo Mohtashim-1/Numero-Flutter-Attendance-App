@@ -1015,7 +1015,27 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
       String customerName = '';
       if (employer.isNotEmpty) {
         try {
-          // First, check if customer exists
+          // First, test if user can access Customer doctype at all
+          print('🔍 Testing Customer doctype access...');
+          final testAccessResponse = await http.get(
+            Uri.parse('$baseUrl/api/resource/Customer?limit_page_length=1'),
+            headers: {
+              'Authorization': apiToken,
+              'Content-Type': 'application/json',
+            },
+          );
+
+          print(
+              '📊 Customer access test status: ${testAccessResponse.statusCode}');
+          if (testAccessResponse.statusCode != 200) {
+            print(
+                '❌ User cannot access Customer doctype. Status: ${testAccessResponse.statusCode}');
+            print('📄 Response: ${testAccessResponse.body}');
+          } else {
+            print('✅ User can access Customer doctype');
+          }
+
+          // Then, check if customer exists
           final customerCheckResponse = await http.get(
             Uri.parse(
                 '$baseUrl/api/resource/Customer?filters=[["customer_name","=","$employer"]]'),
@@ -1041,6 +1061,8 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
 
               // Approach 1: Direct Customer creation (minimal fields)
               try {
+                print(
+                    '🔍 Attempting to create customer with minimal fields: $employer');
                 final createCustomerResponse = await http.post(
                   Uri.parse('$baseUrl/api/resource/Customer'),
                   headers: {
@@ -1053,24 +1075,48 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
                   }),
                 );
 
+                print(
+                    '📊 Customer creation response status: ${createCustomerResponse.statusCode}');
+                print(
+                    '📄 Customer creation response body: ${createCustomerResponse.body}');
+
                 if (createCustomerResponse.statusCode == 200 ||
                     createCustomerResponse.statusCode == 201) {
                   final newCustomerData =
                       jsonDecode(createCustomerResponse.body);
                   customerName = newCustomerData['data']['name'];
-                  print('Successfully created new customer: $customerName');
+                  print('✅ Successfully created new customer: $customerName');
                   customerCreated = true;
                 } else {
                   print(
-                      'Failed to create customer: ${createCustomerResponse.body}');
+                      '❌ Failed to create customer: ${createCustomerResponse.body}');
+
+                  // Try to parse error details for better debugging
+                  try {
+                    final errorData = jsonDecode(createCustomerResponse.body);
+                    if (errorData.containsKey('_server_messages')) {
+                      print(
+                          '🔍 Server messages: ${errorData['_server_messages']}');
+                    }
+                    if (errorData.containsKey('_error_message')) {
+                      print('🔍 Error message: ${errorData['_error_message']}');
+                    }
+                    if (errorData.containsKey('exc_type')) {
+                      print('🔍 Exception type: ${errorData['exc_type']}');
+                    }
+                  } catch (parseError) {
+                    print('⚠️ Could not parse error response: $parseError');
+                  }
                 }
               } catch (e) {
-                print('Error in direct customer creation: $e');
+                print('💥 Error in direct customer creation: $e');
               }
 
               // Approach 2: Try with Company type if first fails
               if (!customerCreated) {
                 try {
+                  print(
+                      '🔍 Attempting to create customer with Company type: $employer');
                   final createCustomerResponse2 = await http.post(
                     Uri.parse('$baseUrl/api/resource/Customer'),
                     headers: {
@@ -1084,20 +1130,66 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
                     }),
                   );
 
+                  print(
+                      '📊 Company customer creation status: ${createCustomerResponse2.statusCode}');
+                  print(
+                      '📄 Company customer creation response: ${createCustomerResponse2.body}');
+
                   if (createCustomerResponse2.statusCode == 200 ||
                       createCustomerResponse2.statusCode == 201) {
                     final newCustomerData =
                         jsonDecode(createCustomerResponse2.body);
                     customerName = newCustomerData['data']['name'];
                     print(
-                        'Successfully created new customer (Individual): $customerName');
+                        '✅ Successfully created new customer (Company): $customerName');
                     customerCreated = true;
                   } else {
                     print(
-                        'Failed to create customer (Individual): ${createCustomerResponse2.body}');
+                        '❌ Failed to create customer (Company): ${createCustomerResponse2.body}');
                   }
                 } catch (e) {
-                  print('Error in individual customer creation: $e');
+                  print('💥 Error in company customer creation: $e');
+                }
+              }
+
+              // Approach 3: Try using a different API endpoint (if available)
+              if (!customerCreated) {
+                try {
+                  print(
+                      '🔍 Attempting alternative customer creation method...');
+                  // Try using the method API instead of resource API
+                  final createCustomerResponse3 = await http.post(
+                    Uri.parse('$baseUrl/api/method/frappe.client.insert'),
+                    headers: {
+                      'Authorization': apiToken,
+                      'Content-Type': 'application/json',
+                    },
+                    body: jsonEncode({
+                      'doc': {
+                        'doctype': 'Customer',
+                        'customer_name': employer,
+                      }
+                    }),
+                  );
+
+                  print(
+                      '📊 Alternative method status: ${createCustomerResponse3.statusCode}');
+                  print(
+                      '📄 Alternative method response: ${createCustomerResponse3.body}');
+
+                  if (createCustomerResponse3.statusCode == 200) {
+                    final newCustomerData =
+                        jsonDecode(createCustomerResponse3.body);
+                    customerName = newCustomerData['data']['name'];
+                    print(
+                        '✅ Successfully created customer via alternative method: $customerName');
+                    customerCreated = true;
+                  } else {
+                    print(
+                        '❌ Alternative method failed: ${createCustomerResponse3.body}');
+                  }
+                } catch (e) {
+                  print('💥 Error in alternative customer creation: $e');
                 }
               }
 
