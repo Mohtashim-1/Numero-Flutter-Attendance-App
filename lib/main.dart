@@ -792,6 +792,10 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
   final TextEditingController bloodTypeController = TextEditingController();
   final TextEditingController emergencyContactController =
       TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  String selectedContactType = 'Email'; // Default to Email
+  String selectedModeOfPayment = 'Cash'; // Default to Cash
+  final TextEditingController customerController = TextEditingController();
 
   @override
   void initState() {
@@ -1110,6 +1114,8 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
       String issuingPlace = issuingPlaceController.text.trim();
       String bloodType = bloodTypeController.text.trim();
       String emergencyContact = emergencyContactController.text.trim();
+      String email = emailController.text.trim();
+      String customer = customerController.text.trim();
 
       // Convert gender format from Emirates ID (M/F) to Frappe format (Male/Female)
       String frappeGender = gender;
@@ -1120,230 +1126,53 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
       }
 
       // Handle employer/customer validation and creation
-      String customerName = '';
-      if (employer.isNotEmpty) {
-        try {
-          // First, test if user can access Customer doctype at all
-          print('🔍 Testing Customer doctype access...');
-          final testAccessResponse = await http.get(
-            Uri.parse('$baseUrl/api/resource/Customer?limit_page_length=1'),
-            headers: {
-              'Authorization': apiToken,
-              'Content-Type': 'application/json',
-            },
-          );
-
-          print(
-              '📊 Customer access test status: ${testAccessResponse.statusCode}');
-          if (testAccessResponse.statusCode != 200) {
-            print(
-                '❌ User cannot access Customer doctype. Status: ${testAccessResponse.statusCode}');
-            print('📄 Response: ${testAccessResponse.body}');
-          } else {
-            print('✅ User can access Customer doctype');
-          }
-
-          // Then, check if customer exists
-          final customerCheckResponse = await http.get(
-            Uri.parse(
-                '$baseUrl/api/resource/Customer?filters=[["customer_name","=","$employer"]]'),
-            headers: {
-              'Authorization': apiToken,
-              'Content-Type': 'application/json',
-            },
-          );
-
-          if (customerCheckResponse.statusCode == 200) {
-            final customerData = jsonDecode(customerCheckResponse.body);
-            if (customerData['data'] != null &&
-                customerData['data'].isNotEmpty) {
-              // Customer exists, use the existing customer name
-              customerName = customerData['data'][0]['name'];
-              print('Found existing customer: $customerName');
-            } else {
-              // Customer doesn't exist, try to create new customer
-              print('Customer not found, attempting to create: $employer');
-
-              // Try multiple approaches to create customer
-              bool customerCreated = false;
-
-              // Approach 1: Direct Customer creation (minimal fields)
-              try {
-                print(
-                    '🔍 Attempting to create customer with minimal fields: $employer');
-                final createCustomerResponse = await http.post(
-                  Uri.parse('$baseUrl/api/resource/Customer'),
-                  headers: {
-                    'Authorization': apiToken,
-                    'Content-Type': 'application/json',
-                  },
-                  body: jsonEncode({
-                    'doctype': 'Customer',
-                    'customer_name': employer,
-                  }),
-                );
-
-                print(
-                    '📊 Customer creation response status: ${createCustomerResponse.statusCode}');
-                print(
-                    '📄 Customer creation response body: ${createCustomerResponse.body}');
-
-                if (createCustomerResponse.statusCode == 200 ||
-                    createCustomerResponse.statusCode == 201) {
-                  final newCustomerData =
-                      jsonDecode(createCustomerResponse.body);
-                  customerName = newCustomerData['data']['name'];
-                  print('✅ Successfully created new customer: $customerName');
-                  customerCreated = true;
-                } else {
-                  print(
-                      '❌ Failed to create customer: ${createCustomerResponse.body}');
-
-                  // Try to parse error details for better debugging
-                  try {
-                    final errorData = jsonDecode(createCustomerResponse.body);
-                    if (errorData.containsKey('_server_messages')) {
-                      print(
-                          '🔍 Server messages: ${errorData['_server_messages']}');
-                    }
-                    if (errorData.containsKey('_error_message')) {
-                      print('🔍 Error message: ${errorData['_error_message']}');
-                    }
-                    if (errorData.containsKey('exc_type')) {
-                      print('🔍 Exception type: ${errorData['exc_type']}');
-                    }
-                  } catch (parseError) {
-                    print('⚠️ Could not parse error response: $parseError');
-                  }
-                }
-              } catch (e) {
-                print('💥 Error in direct customer creation: $e');
-              }
-
-              // Approach 2: Try with Company type if first fails
-              if (!customerCreated) {
-                try {
-                  print(
-                      '🔍 Attempting to create customer with Company type: $employer');
-                  final createCustomerResponse2 = await http.post(
-                    Uri.parse('$baseUrl/api/resource/Customer'),
-                    headers: {
-                      'Authorization': apiToken,
-                      'Content-Type': 'application/json',
-                    },
-                    body: jsonEncode({
-                      'doctype': 'Customer',
-                      'customer_name': employer,
-                      'customer_type': 'Company',
-                    }),
-                  );
-
-                  print(
-                      '📊 Company customer creation status: ${createCustomerResponse2.statusCode}');
-                  print(
-                      '📄 Company customer creation response: ${createCustomerResponse2.body}');
-
-                  if (createCustomerResponse2.statusCode == 200 ||
-                      createCustomerResponse2.statusCode == 201) {
-                    final newCustomerData =
-                        jsonDecode(createCustomerResponse2.body);
-                    customerName = newCustomerData['data']['name'];
-                    print(
-                        '✅ Successfully created new customer (Company): $customerName');
-                    customerCreated = true;
-                  } else {
-                    print(
-                        '❌ Failed to create customer (Company): ${createCustomerResponse2.body}');
-                  }
-                } catch (e) {
-                  print('💥 Error in company customer creation: $e');
-                }
-              }
-
-              // Approach 3: Try using a different API endpoint (if available)
-              if (!customerCreated) {
-                try {
-                  print(
-                      '🔍 Attempting alternative customer creation method...');
-                  // Try using the method API instead of resource API
-                  final createCustomerResponse3 = await http.post(
-                    Uri.parse('$baseUrl/api/method/frappe.client.insert'),
-                    headers: {
-                      'Authorization': apiToken,
-                      'Content-Type': 'application/json',
-                    },
-                    body: jsonEncode({
-                      'doc': {
-                        'doctype': 'Customer',
-                        'customer_name': employer,
-                      }
-                    }),
-                  );
-
-                  print(
-                      '📊 Alternative method status: ${createCustomerResponse3.statusCode}');
-                  print(
-                      '📄 Alternative method response: ${createCustomerResponse3.body}');
-
-                  if (createCustomerResponse3.statusCode == 200) {
-                    final newCustomerData =
-                        jsonDecode(createCustomerResponse3.body);
-                    customerName = newCustomerData['data']['name'];
-                    print(
-                        '✅ Successfully created customer via alternative method: $customerName');
-                    customerCreated = true;
-                  } else {
-                    print(
-                        '❌ Alternative method failed: ${createCustomerResponse3.body}');
-                  }
-                } catch (e) {
-                  print('💥 Error in alternative customer creation: $e');
-                }
-              }
-
-              // If both approaches failed, show warning
-              if (!customerCreated) {
-                // Show user-friendly message about customer creation failure
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                        '⚠️ Note: Could not create customer for employer "$employer". Student will be created without customer link.'),
-                    backgroundColor: Colors.orange,
-                    duration: Duration(seconds: 3),
-                  ),
-                );
-                // Continue without customer if creation fails
-              }
-            }
-          } else {
-            print(
-                'Failed to check customer existence: ${customerCheckResponse.body}');
-          }
-        } catch (e) {
-          print('Error handling customer: $e');
-          // Show user-friendly error message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                  '⚠️ Note: Error checking customer for employer "$employer". Student will be created without customer link.'),
-              backgroundColor: Colors.orange,
-              duration: Duration(seconds: 3),
-            ),
-          );
-          // Continue without customer if there's an error
-        }
+      String finalCustomer = customer;
+      if (finalCustomer.isEmpty) {
+        // If customer creation failed, store employer name in a custom field
+        finalCustomer = employer;
       }
 
       // Validate required fields
-      if (firstName.isEmpty || lastName.isEmpty || eidNo.isEmpty) {
+      if (firstName.isEmpty || lastName.isEmpty || eidNo.isEmpty || customer.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content:
-                Text('Please fill in First Name, Last Name, and ID Number'),
+                Text('Please fill in First Name, Last Name, ID Number, and Customer'),
             backgroundColor: Colors.orange,
           ),
         );
         return;
+      }
+
+      // Validate email based on contact type
+      if (selectedContactType == 'Email') {
+        if (email.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter an email address when Contact Type is "Email"'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+        
+        // Validate email format
+        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please enter a valid email address'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+
+      // Generate email if contact type is "Without Email"
+      String finalEmail = email;
+      if (selectedContactType == 'Without Email') {
+        // Generate a system email based on EID number
+        finalEmail = 'student_${eidNo.replaceAll('-', '')}@system.generated';
       }
 
       // Create the request payload
@@ -1361,11 +1190,15 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
         'custom_issuing_place': issuingPlace,
         'custom_blood_type': bloodType,
         'custom_emergency_contact': emergencyContact,
+        'student_email_id': finalEmail,
+        'custom_contact_type': selectedContactType,
+        'custom_mode_of_payment': selectedModeOfPayment,
+        'customer': customer,
       };
 
       // Add customer_name if available
-      if (customerName.isNotEmpty) {
-        payload['customer_name'] = customerName;
+      if (finalCustomer.isNotEmpty) {
+        payload['customer_name'] = finalCustomer;
       } else if (employer.isNotEmpty) {
         // If customer creation failed, store employer name in a custom field
         payload['custom_employer_name'] = employer;
@@ -1452,8 +1285,8 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
                         if (occupation.isNotEmpty)
                           Text('Occupation: $occupation'),
                         if (employer.isNotEmpty) Text('Employer: $employer'),
-                        if (customerName.isNotEmpty)
-                          Text('Customer: $customerName',
+                        if (finalCustomer.isNotEmpty)
+                          Text('Customer: $finalCustomer',
                               style: TextStyle(
                                   color: Colors.green,
                                   fontWeight: FontWeight.bold))
@@ -1462,7 +1295,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
                               style: TextStyle(
                                   color: Colors.orange,
                                   fontStyle: FontStyle.italic)),
-                        if (employer.isNotEmpty && customerName.isEmpty)
+                        if (employer.isNotEmpty && finalCustomer.isEmpty)
                           Text('Employer stored in custom field',
                               style: TextStyle(
                                   color: Colors.blue,
@@ -1500,7 +1333,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
                         duration: Duration(seconds: 2),
                       ),
                     );
-                  },
+                  },  
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
@@ -1580,6 +1413,101 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
                       _buildDialogDataField('Blood Type', bloodTypeController),
                       _buildDialogDataField(
                           'Emergency Contact', emergencyContactController),
+                      
+                      // Contact Type Dropdown
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Contact Type *',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              value: selectedContactType,
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                helperText: 'Choose how to handle contact information',
+                                helperStyle: TextStyle(
+                                  color: Colors.blue.shade600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              items: [
+                                DropdownMenuItem(
+                                  value: 'Email',
+                                  child: Text('Email'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'Without Email',
+                                  child: Text('Without Email'),
+                                ),
+                              ],
+                              onChanged: (String? newValue) {
+                                setDialogState(() {
+                                  selectedContactType = newValue!;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Email field - only show when Email is selected
+                      if (selectedContactType == 'Email')
+                        _buildDialogDataField('Email Address *', emailController, isRequired: true),
+                      
+                      // Mode of Payment Dropdown
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mode of Payment *',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            DropdownButtonFormField<String>(
+                              value: selectedModeOfPayment,
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                helperText: 'Select payment method',
+                                helperStyle: TextStyle(
+                                  color: Colors.blue.shade600,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              items: [
+                                DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                                DropdownMenuItem(value: 'Monthly Agreement', child: Text('Monthly Agreement')),
+                                DropdownMenuItem(value: 'Service Order', child: Text('Service Order')),
+                                DropdownMenuItem(value: 'Purchase Order', child: Text('Purchase Order')),
+                              ],
+                              onChanged: (String? newValue) {
+                                setDialogState(() {
+                                  selectedModeOfPayment = newValue!;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Customer field
+                      _buildDialogDataField('Customer *', customerController, isRequired: true),
                     ],
                   ),
                 ),
@@ -1611,7 +1539,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
     );
   }
 
-  Widget _buildDialogDataField(String label, TextEditingController controller) {
+  Widget _buildDialogDataField(String label, TextEditingController controller, {bool isRequired = false}) {
     String? helperText;
 
     // Add helper text for gender field to show conversion
@@ -1632,10 +1560,16 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
       }
     }
 
+    // Add helper text for email field
+    if (label.contains('Email')) {
+      helperText = 'Required for Frappe contact creation';
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: TextField(
         controller: controller,
+        keyboardType: label.contains('Email') ? TextInputType.emailAddress : TextInputType.text,
         decoration: InputDecoration(
           labelText: label,
           border: OutlineInputBorder(),
@@ -1645,6 +1579,7 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
             color: Colors.blue.shade600,
             fontSize: 12,
           ),
+          errorText: isRequired && controller.text.trim().isEmpty ? 'This field is required' : null,
         ),
       ),
     );
@@ -1664,6 +1599,10 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
     issuingPlaceController.clear();
     bloodTypeController.clear();
     emergencyContactController.clear();
+    emailController.clear();
+    customerController.clear();
+    selectedContactType = 'Email'; // Reset to default
+    selectedModeOfPayment = 'Cash'; // Reset to default
     setState(() {
       extractedDataFront.clear();
       extractedDataBack.clear();
@@ -1922,6 +1861,8 @@ class _EmiratesIDScanPageState extends State<EmiratesIDScanPage> {
     issuingPlaceController.dispose();
     bloodTypeController.dispose();
     emergencyContactController.dispose();
+    emailController.dispose();
+    customerController.dispose();
     super.dispose();
   }
 
