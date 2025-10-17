@@ -76,17 +76,30 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
       // Check if biometric authentication is available
       final bool isAvailable = await _localAuth.canCheckBiometrics;
       if (!isAvailable) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fingerprint authentication not available on this device')),
+        _showBiometricErrorDialog(
+          'Fingerprint Not Available',
+          'This device does not support fingerprint authentication. Please use a device with fingerprint scanner.',
         );
         return;
       }
 
       // Check available biometrics
       final List<BiometricType> availableBiometrics = await _localAuth.getAvailableBiometrics();
+      print('Available biometrics: $availableBiometrics');
+      
       if (availableBiometrics.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No biometric authentication methods available')),
+        _showBiometricErrorDialog(
+          'No Biometric Setup',
+          'No biometric authentication is set up on this device. Please set up fingerprint in device settings first.',
+        );
+        return;
+      }
+
+      // Check if fingerprint is specifically available
+      if (!availableBiometrics.contains(BiometricType.fingerprint)) {
+        _showBiometricErrorDialog(
+          'Fingerprint Not Set Up',
+          'Fingerprint is not set up on this device. Please add a fingerprint in device settings.',
         );
         return;
       }
@@ -109,14 +122,32 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fingerprint authentication failed')),
+          const SnackBar(content: Text('Fingerprint authentication cancelled or failed')),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error authenticating fingerprint: $e')),
+      print('Fingerprint authentication error: $e');
+      _showBiometricErrorDialog(
+        'Authentication Error',
+        'Error during fingerprint authentication: $e',
       );
     }
+  }
+
+  void _showBiometricErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _saveSignature() async {
@@ -163,12 +194,13 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
       return;
     }
 
-    if (!fingerprintVerified) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please verify your fingerprint first!')),
-      );
-      return;
-    }
+    // Note: Fingerprint verification is optional for now
+    // if (!fingerprintVerified) {
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     const SnackBar(content: Text('Please verify your fingerprint first!')),
+    //   );
+    //   return;
+    // }
 
     setState(() {
       isSubmitting = true;
@@ -404,7 +436,7 @@ class _StudentAttendancePageState extends State<StudentAttendancePage> {
                       Icon(Icons.fingerprint, color: AppTheme.primaryColor),
                       const SizedBox(width: 8),
                       const Text(
-                        'Fingerprint Verification',
+                        'Fingerprint Verification (Optional)',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
